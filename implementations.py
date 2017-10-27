@@ -200,21 +200,21 @@ def build_poly(x, degree):
     
 #Split data to do train vs test
 
-def split_data(x, y, ratio, seed=1):
+def split_data(y,x, ratio, seed=1):
     '''
         split the dataset based on the split ratio. If ratio is 0.8
         you will have 80% of your data set dedicated to training
         and the rest dedicated to testing
         '''
-    # set seed
+    
     np.random.seed(seed)
-    # ***************************************************
-    x_y = np.c_[(x,y)]
-    #print(x_y)
-    Ntrain = int(np.size(y)*ratio)
-    np.random.shuffle(x_y)
-    #print(x_y)
-    return x_y.T[0][:Ntrain], x_y.T[1][:Ntrain], x_y.T[0][Ntrain:], x_y.T[1][Ntrain:]
+    indices = list(range(x.shape[0]))
+    np.random.shuffle(indices)
+    
+    indices_train = indices[:round(x.shape[0]*ratio)]
+    indices_test = indices[round(x.shape[0]*ratio):]
+    
+    return y[indices_train],x[indices_train,:],y[indices_test],x[indices_test,:]
 
 
 
@@ -293,6 +293,22 @@ def learning_by_newton_method(y, tx, w, gamma):
     
     return loss, w
 
+def non_values_to_random_normally_dist(x):
+    '''substitute the -999 values in x with normally distributed values with mean and sigma of each column'''
+    #loop over all columns
+    for col in range(x.shape[1]):
+        x1 = 1*x #support variable
+        x1[x1==-999] = 0 #set non-values to zero
+        #keep track of the non-values indices
+        indices = [i for i,item in enumerate(x[:,col] == -999) if item]
+        length = len(x1[:,col])
+        nonzeros = sum(x1[:,col] != 0)
+        mean = np.mean(x1[:,col])*length/nonzeros
+        norm = np.linalg.norm(x1[:,col])/nonzeros
+        for i in indices:
+            #for each non-value replace it with random noise distributed according to the others belonging to the same feature
+            x[i,col] = np.random.normal(mean, norm)
+    return x
 
 def ridge_with_simple_splitting(y,x, degree, ratio, lambdas, seed = 1):
     '''performe ridge regression with simple splitting of the dataset.
@@ -303,14 +319,13 @@ def ridge_with_simple_splitting(y,x, degree, ratio, lambdas, seed = 1):
     
     loss = []
     y_train, x_train, y_test, x_test = split_data(y, x, ratio, seed)
-
     phi_test = build_poly(x_test, degree)
     phi_train = build_poly(x_train, degree)
 
     for lambda_ in lambdas:
 
-        w = ridge_regression(y_train, phi_train, lambda_)
-        rmse_test = cost_function(y_test, phi_test, w)
+        w, _ = ridge_regression(y_train, phi_train, lambda_)
+        rmse_test = mse_loss(y_test, phi_test, w)
 
         loss.append(rmse_test)
 
@@ -337,14 +352,21 @@ def cross_validation_ridge(y, x, k_fold, degree, lambdas, seed = 1):
         loss_temp = [] #empty list to store losses for a given k
         
         for lambda_ in lambdas:
-            w = ridge_regression(y_train, phi_train, lambda_)
+            w, _ = ridge_regression(y_train, phi_train, lambda_)
             
-            rmse_test = cost_function(y_test, phi_test, w)/k_fold #divide by k_fold in order to mean over them
+            rmse_test = mse_loss(y_test, phi_test, w)/k_fold #divide by k_fold in order to mean over them
             loss_temp.append(rmse_test)
 
         loss += loss_temp #add together losses for each k
     semilog_loss_lambda_plot(loss, lambdas, seed, degree)
     
+    return 0
+
+def predict(y, x, w):
+    y_pred = x.dot(w)
+    correct = sum(np.sign(y_pred) == y)/len(y)
+    return correct*100
+
 def create_submission(x_submission, degree, ids_submission):
     '''creates the y_predicted file for the submission on kaggle'''
     #build the polynomial from x
@@ -353,6 +375,37 @@ def create_submission(x_submission, degree, ids_submission):
     y_predicted = np.sign(phi_submission.dot(w))
     #create the file
     create_csv_submission(ids_submission, y_predicted, "predictions.csv")
+
+'''Plotting functions'''
+
+def semilog_loss_lambda_plot(loss, lambdas, seed, degree):
+    plt.title("lambda vs loss for seed = %i and degree = %i" %(seed, degree))
+    plt.xlabel("lambda")
+    plt.ylabel("loss")
+    plt.semilogx(lambdas, loss, 'r')
+    plt.savefig("lambda_vs_loss_simple_splitting_ridge_seed%i.png" %seed)
+    
+'others'
+
+def split_data_cross(y, phi, k, k_indices, degree, seed=1):
+  
+    y_test, phi_test = (y[k_indices[k]],phi[k_indices[k],:])
+    
+    not_k = [i for i,item in enumerate(y) if i not in k_indices[k]]
+    y_train = y[not_k]
+    phi_train = phi[not_k,:]
+    
+    return y_train, phi_train, y_test, phi_test
+
+def build_k_indices(y, k_fold, seed):
+    """build k indices for k-fold."""
+    num_row = y.shape[0]
+    interval = int(num_row / k_fold)
+    np.random.seed(seed)
+    indices = np.random.permutation(num_row)
+    k_indices = [indices[k * interval: (k + 1) * interval]
+                 for k in range(k_fold)]
+    return np.array(k_indices)
 
 
 
