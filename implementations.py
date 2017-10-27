@@ -48,20 +48,30 @@ def least_squares(y, tx):
         y: data array;
         tx: transposed x data;
         Returns mse, and optimal weights"""
-    w = np.dot(np.linalg.inv(np.dot(tx.T, tx)), np.dot(tx.T,y))
-    e = y - np.dot(tx, w)
-    mse = np.dot(e.T,e)/2/np.size(y)
-    return w, mse
+    #try to invert the matrix, if singular calculate pseudo-inverse instead
+    try:
+        w = np.linalg.solve(tx.T.dot(tx), tx.T.dot(y))
+    except np.linalg.linalg.LinAlgError as err:
+        A = np.dot(np.transpose(tx),tx)
+        inverse = np.linalg.pinv(A)
+        w = np.dot(np.dot(inverse,np.transpose(tx)),y)
+        
+    return w, mse_loss(y, tx, w)
 
 def ridge_regression(y, tx, lambda_):
     '''y: output data
         tx: transposed input data vector
         lambda_: ridge parameter multiplying the L-2 norm
-        Returns loss and weights'''
-    w = np.dot(np.linalg.inv(np.dot(tx.T, tx) + lambda_/2/np.size(y)*np.identity(np.size(tx[0,:]))), np.dot(tx.T,y))
-    e = y - np.dot(tx, w)
-    loss = np.dot(e.T,e)/2/np.size(y)
-    return w, loss
+        Returns mse, and optimal weights'''
+    #try to invert the matrix, if singular calculate pseudo-inverse instead
+    try:
+        w = np.linalg.solve(tx.T.dot(tx) + lambda_/(2*tx.shape[0])*np.identity(tx.shape[1]), tx.T.dot(y))
+    except np.linalg.linalg.LinAlgError as err:
+        A = np.dot(np.transpose(tx),tx) + lambda_/(2*tx.shape[0])*np.identity(tx.shape[1])
+        inverse = np.linalg.pinv(A)
+        w = np.dot(np.dot(inverse,np.transpose(tx)),y)
+        
+    return w, mse_loss(y,tx,w)
 
 
 
@@ -74,13 +84,13 @@ def logistic_regression(y, tx, initial_w, max_iters, gamma):
     
     w = np.copy(initial_w)
     
-    loss = calculate_loss(y, tx, w)
+    loss = calculate_loss_logistic(y, tx, w)
     # compute the cost
     
-    grad = calculate_gradient(y, tx, w)
+    grad = calculate_gradient_logistic(y, tx, w)
     # compute the gradient
     
-    #hess = calculate_hessian(y, tx, w)
+    #hess = calculate_hessian_logistic(y, tx, w)
     # compute the hessian, for generalizations
     
     threshold = 1e-8
@@ -94,7 +104,7 @@ def logistic_regression(y, tx, initial_w, max_iters, gamma):
         if iter_ > 1 and np.abs(loss - previousloss) < threshold:
             break
         previousloss = loss
-    return w, loss
+    return w, mse_loss(y,tx,w)
 
 
 def reg_logistic_regression(y, tx, lambda_, initial_w, max_iters, gamma):
@@ -106,13 +116,13 @@ def reg_logistic_regression(y, tx, lambda_, initial_w, max_iters, gamma):
     
     w = np.copy(initial_w)
     
-    loss = calculate_loss(y, tx, w)
+    loss = calculate_loss_logistic(y, tx, w)
     # compute the cost
     
-    grad = calculate_gradient(y, tx, w)
+    grad = calculate_gradient_logistic(y, tx, w)
     # compute the gradient
     
-    hess = calculate_hessian(y, tx, w)
+    hess = calculate_hessian_logistic(y, tx, w)
     # compute the hessian
     
     threshold = 1e-8
@@ -126,7 +136,7 @@ def reg_logistic_regression(y, tx, lambda_, initial_w, max_iters, gamma):
             break
         previousloss = loss
         
-    return w, loss
+    return w, mse_loss(y,tx,w)
 
 
 
@@ -176,6 +186,15 @@ def build_poly_col_ones(x, degree):
     for k in range(degree-1):
         x = np.hstack((x,x[:,1:]**degree))
     return x
+
+def build_poly(x, degree):
+    '''Polynomial basis functions for input data x, for j=0 up to j=degree.
+        Returns the matrix formed by applying the polynomial basis to the input data'''
+    num_samples = x.shape[0]
+    ones = np.ones((num_samples,))
+    pol = np.asarray([x**power for power in range(1,degree+1)])
+    pol = pol.transpose(1,2,0).reshape(-1,30*degree)
+    return np.c_[pol,ones]
     
 
     
@@ -205,13 +224,20 @@ def sigmoid(t):
     """apply sigmoid function on t."""
     return 1/ (1 + np.exp(-t) ) #np.exp(t)/(1+np.exp(t))
 
-def calculate_loss(y, tx, w):
+def calculate_loss_logistic(y, tx, w):
     """compute the cost by negative log likelihood."""
     return sum(np.log(1+np.exp(np.dot(tx,w))) - y*np.dot(tx,w))
 
-def calculate_gradient(y, tx, w):
+def calculate_gradient_logistic(y, tx, w):
     """compute the gradient of loss."""
     return np.dot(tx.T, sigmoid(np.dot(tx,w))-y)
+
+def predict_y_logistic(x,w):
+    '''binary prediction for logistic.
+    returns y vector of {-1,1}'''
+    for xi in x:
+        y_pred = [-1 if sigmoid(xi.dot(w)) <= 0.5 else 1 ]
+    return y_pred
 
 def learning_by_gradient_descent(y, tx, w, gamma):
     """
@@ -219,10 +245,10 @@ def learning_by_gradient_descent(y, tx, w, gamma):
         Return the loss and the updated w.
         """
     
-    loss = calculate_loss(y, tx, w)
+    loss = calculate_loss_logistic(y, tx, w)
     # compute the cost
     
-    grad = calculate_gradient(y, tx, w)
+    grad = calculate_gradient_logistic(y, tx, w)
     # compute the gradient
     
     # update w
@@ -236,10 +262,10 @@ def learning_by_penalized_gradient(y, tx, w, gamma, lambda_):
         Return the loss and the updated w.
         """
     
-    loss = calculate_loss(y, tx, w) + lambda_/2*np.dot(w,w)
+    loss = calculate_loss_logistic(y, tx, w) + lambda_/2*np.dot(w,w)
     # compute the cost
     
-    grad = calculate_gradient(y, tx, w) + lambda_*w
+    grad = calculate_gradient_logistic(y, tx, w) + lambda_*w
     # compute the gradient
     
     # update w
@@ -247,7 +273,7 @@ def learning_by_penalized_gradient(y, tx, w, gamma, lambda_):
     
     return loss, w
 
-def calculate_hessian(y, tx, w):
+def calculate_hessian_logistic(y, tx, w):
     """return the hessian of the loss function."""
     diagS = (sigmoid(np.dot(tx, w))*(1- sigmoid(np.dot(tx, w))))
     S = np.diagflat([diagS])
