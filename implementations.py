@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from proj1_helpers import *
 
 ### Required Project Functions
 
@@ -194,7 +195,8 @@ def build_poly(x, degree):
     ones = np.ones((num_samples,))
     pol = np.asarray([x**power for power in range(1,degree+1)])
     pol = pol.transpose(1,2,0).reshape(-1,30*degree)
-    return np.c_[pol,ones]
+    cross = np.asarray([np.multiply(x[:,i],x[:,j]) for i in range(x.shape[1]) for j in range(i) if i != j])
+    return np.c_[pol,ones,cross.T]
     
 
     
@@ -356,18 +358,54 @@ def cross_validation_ridge(y, x, k_fold, degree, lambdas, seed = 1):
             
             rmse_test = mse_loss(y_test, phi_test, w)/k_fold #divide by k_fold in order to mean over them
             loss_temp.append(rmse_test)
-
+            print("Correct answers: ",predict(y_test,phi_test,w), '%', "for lambda = %f" %lambda_)
         loss += loss_temp #add together losses for each k
     semilog_loss_lambda_plot(loss, lambdas, seed, degree)
     
-    return 0
+    return w
+
+def cross_validation_logistic(y, x,initial_w, k_fold, degree, max_iters, gammas, seed = 1):
+    '''perform cross validation on logistic regression
+    lambdas: array, better if log spaced
+    plot in semilog scale mse as function of gamma'''
+    
+    #create empty loss array
+    loss = np.zeros((len(gammas))) 
+    #add poly values to the features
+    phi = build_poly(x, degree)
+    #build indices for cross validation
+    k_indices = build_k_indices(y, k_fold, seed)
+
+    for k in range(k_fold):
+        #split data according to kth fold
+        y_train, phi_train, y_test, phi_test = split_data_cross(y, phi, k, k_indices, degree)
+        y_train = [0 if t == -1 else t for t in y_train]
+
+        loss_temp = [] #empty list to store losses for a given k
+        
+        for gamma in gammas:
+            w, _ = logistic_regression(y_train, phi_train, initial_w, max_iters, gamma)
+            
+            rmse_test = mse_loss(y_test, phi_test, w)/k_fold #divide by k_fold in order to mean over them
+            loss_temp.append(rmse_test)
+            print("Correct answers: ",predict_logistic(y_test,phi_test,w), '%', "for gamma = %f" %gamma)
+        loss += loss_temp #add together losses for each k
+    semilog_loss_lambda_plot(loss, gammas, seed, degree)
+    
+    return w
 
 def predict(y, x, w):
     y_pred = x.dot(w)
     correct = sum(np.sign(y_pred) == y)/len(y)
     return correct*100
 
-def create_submission(x_submission, degree, ids_submission):
+def predict_logistic(y,x,w):
+    y_pred = 1*(sigmoid(x.dot(w)) >= 0.5)
+    y_pred = [-1 if t == 0 else t for t in y_pred]
+    correct = sum(np.sign(y_pred) == y)/len(y)
+    return correct*100
+
+def create_submission(x_submission, degree, ids_submission, w):
     '''creates the y_predicted file for the submission on kaggle'''
     #build the polynomial from x
     phi_submission = build_poly(x_submission, degree) 
