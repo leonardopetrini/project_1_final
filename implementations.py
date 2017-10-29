@@ -141,3 +141,25 @@ def reg_logistic_regression(y, tx, lambda_, initial_w, max_iters, gamma):
         
     return w, mse_loss(y,tx,w)
 
+
+
+### Extra
+
+def bayes_regression(y, tx, lambda_, q):
+    '''y: output data
+        tx: transposed input data vector
+        lambda_: ridge parameter multiplying the L-2 norm
+        q: L-q norm penalty
+        Returns mse, and optimal weights'''
+    #try to invert the matrix, if singular calculate pseudo-inverse instead
+    w_estimate = ridge_regression(y, tx, lambda_)[0] #estimates w by ridge
+    wL2 = np.sqrt(w_estimate**2)
+    
+    try:
+        w = np.linalg.solve(tx.T.dot(tx) + lambda_ * tx.shape[0] * q *( wL2**(q-2) )*np.identity(tx.shape[1]), tx.T.dot(y))
+    except np.linalg.linalg.LinAlgError as err:
+        A = tx.T.dot(tx) + lambda_ * tx.shape[0] * q *( wL2**(q-2) )*np.identity(tx.shape[1]), tx.T.dot(y)
+        inverse = np.linalg.pinv(A)
+        w = np.dot(np.dot(inverse,np.transpose(tx)),y)
+    
+    return w, mse_loss(y,tx,w)
