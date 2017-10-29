@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import time
 from implementations_helpers import *
 
 ### Required Project Functions
@@ -48,7 +49,9 @@ def least_squares(y, tx):
     """calculate the least squares solution.
         y: data array;
         tx: transposed x data;
-        Returns mse, and optimal weights"""
+        Returns mse, and optimal weights
+        Also prints execution time for comparison with GD"""
+    start_time = time.time()
     #try to invert the matrix, if singular calculate pseudo-inverse instead
     try:
         w = np.linalg.solve(tx.T.dot(tx), tx.T.dot(y))
@@ -57,6 +60,7 @@ def least_squares(y, tx):
         inverse = np.linalg.pinv(A)
         w = np.dot(np.dot(inverse,np.transpose(tx)),y)
         
+    print("Execution time=%s seconds" % (time.time() - start_time))
     return w, mse_loss(y, tx, w)
 
 def ridge_regression(y, tx, lambda_):

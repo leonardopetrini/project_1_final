@@ -20,7 +20,6 @@ def mse_loss(y, tx, w):
 
 def compute_gradient(y, tx, w):
     """Compute the gradient."""
-    #print (tx.T.shape, y.shape, w.shape)
     return -np.dot(tx.T, y - np.dot(tx, w))/np.size(y)
 
 
@@ -28,7 +27,6 @@ def compute_gradient(y, tx, w):
 
 def compute_stochastic_gradient(y, tx, w, batchsize):
     """Compute a stochastic gradient from just few examples n and their corresponding y_n labels."""
-    #print (tx.T[:,:batchsize+1].shape, y[:batchsize+1].shape, tx[:batchsize+1,:].shape, w.shape )
     return -np.dot(tx.T[:,:batchsize+1], y[:batchsize+1] - np.dot(tx[:batchsize+1,:], w))/np.size(y[:batchsize+1])
 
 #Logistic Regression
@@ -47,7 +45,7 @@ def calculate_gradient_logistic(y, tx, w):
 
 def learning_by_gradient_descent(y, tx, w, gamma):
     """
-        Do one step of gradient descen using logistic regression.
+        Do one step of gradient descent using logistic regression.
         Return the loss and the updated w.
         """
     

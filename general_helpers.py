@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import time#For execution times
 from implementations import *
 
 ### Helper Functions for the main project files
@@ -30,7 +31,21 @@ def build_poly(x, degree, crossed = True):
     else:
         cross = np.asarray([np.multiply(x[:,i],x[:,j]) for i in range(x.shape[1]) for j in range(i) if i != j])
         return np.c_[pol,ones,cross.T]
-        
+    
+#Function to get len(w) for GD,SGD (- Redundant!)
+
+def get_length_w(x, degree, crossed = True):
+    '''Similar to the above, just rturns number needed for len(w)'''
+    num_samples = x.shape[0]
+    ones = np.ones((num_samples,))
+    pol = np.asarray([x**power for power in range(1,degree+1)])
+    pol = pol.transpose(1,2,0).reshape(-1,30*degree)
+    if crossed == False:
+        return np.c_[pol,ones].shape[1]
+    else:
+        cross = np.asarray([np.multiply(x[:,i],x[:,j]) for i in range(x.shape[1]) for j in range(i) if i != j])
+        return np.c_[pol,ones,cross.T].shape[1]
+    
     
 #Split data to do train vs test
 
@@ -67,12 +82,22 @@ def non_values_to_random_normally_dist(x):
             x[i,col] = np.random.normal(mean, norm)
     return x
 
+def compare(x_normalized, x_0):
+    '''This funciton compares the two "cleaning" methods by subraction'''
+    diff  = x_normalized - x_0
+    indices = np.where(diff != 0)
+    i1, i2 = indices[0], indices[1]
+    print ("Number of indices which are different is",len(i1))
+    return 0
+    
+
 def GD_with_simple_splitting(y,x, degree, ratio, initial_w, max_iters, gamma, seed = 1):
     '''performe LS regression with simple splitting of the dataset.
     ratio is #train/#test
-    print percentage of correct answers for each lambda
+    print percentage of correct answers and execution time
     plot loss vs lambda
     return the loss vector'''
+    start_time = time.time()
     
     losses = []
     y_train, x_train, y_test, x_test = split_data(y, x, ratio, seed)
@@ -86,16 +111,17 @@ def GD_with_simple_splitting(y,x, degree, ratio, initial_w, max_iters, gamma, se
     
     losses.append(rmse_test)
 
-    print("Correct answers: ",predict(y_test,phi_test,w), '%')
+    print("Correct answers: ",predict(y_test,phi_test,w), '%',"Execution time=%s seconds" % (time.time() - start_time))
     #semilog_loss_lambda_plot(losses, lambdas, seed, degree)
     return w
 
 def SGD_with_simple_splitting(y,x, degree, ratio, initial_w, max_iters, gamma, seed = 1):
     '''performe LS regression with simple splitting of the dataset.
     ratio is #train/#test
-    print percentage of correct answers for each lambda
+    print percentage of correct answers and execution time
     plot loss vs lambda
     return the loss vector'''
+    start_time = time.time()
     
     losses = []
     y_train, x_train, y_test, x_test = split_data(y, x, ratio, seed)
@@ -109,7 +135,7 @@ def SGD_with_simple_splitting(y,x, degree, ratio, initial_w, max_iters, gamma, s
     
     losses.append(rmse_test)
 
-    print("Correct answers: ",predict(y_test,phi_test,w), '%')
+    print("Correct answers: ",predict(y_test,phi_test,w), '%',"Execution time=%s seconds" % (time.time() - start_time))
     #semilog_loss_lambda_plot(losses, lambdas, seed, degree)
     return w
 
@@ -198,13 +224,12 @@ def logistic_with_simple_splitting(y,x, degree, ratio, initial_w, max_iters, gam
 
     
 
-    w, loss = logistic_regression(y_train, phi_train, initial_w, max_iters, gamma)
+    w, loss = logistic_regression(y_train, phi_train, initial_w, max_iters, gamma)#Note that the loss here is an MSE loss
     rmse_test = np.sqrt(2*loss)
 
     losses.append(rmse_test)
 
     print("Correct answers: ",pred_log(y_test,phi_test,w), '%')
-    #semilog_loss_lambda_plot(losses, lambdas, seed, degree)
     return w
 
 
@@ -223,7 +248,7 @@ def reg_logistic_with_simple_splitting(y,x, degree, ratio, initial_w, max_iters,
 
     for lambda_ in lambdas:
 
-        w, loss = reg_logistic_regression(y_train, phi_train, lambda_, initial_w, max_iters, gamma)
+        w, loss = reg_logistic_regression(y_train, phi_train, lambda_, initial_w, max_iters, gamma)#Note that the loss here is an MSE loss
         rmse_test = np.sqrt(2*loss)
 
         losses.append(rmse_test)
@@ -262,7 +287,37 @@ def cross_validation_ridge(y, x, k_fold, degree, lambdas, seed = 1):
     
     return w
 
+def cross_validation_logistic(y, x, initial_w, max_iters, gamma, k_fold, degree, lambdas, seed = 1):
+    '''perform cross validation on logistic regression
+    lambdas: array, better if log spaced
+    plot in semilog scale rmse as function of lambda'''
+    
+    #create empty loss array
+    loss = np.zeros((len(lambdas))) 
+    #add poly values to the features
+    phi = build_poly(x, degree)
+    #build indices for cross validation
+    k_indices = build_k_indices(y, k_fold, seed)
+
+    for k in range(k_fold):
+        #split data according to kth fold
+        y_train, phi_train, y_test, phi_test = split_data_cross(y, phi, k, k_indices, degree)
+
+        loss_temp = [] #empty list to store losses for a given k
+        
+        for lambda_ in lambdas:
+            w, _ = reg_logistic_regression(y_train, phi_train, lambda_, initial_w, max_iters, gamma)
+            
+            rmse_test = mse_loss(y_test, phi_test, w)/k_fold #divide by k_fold in order to mean over them
+            loss_temp.append(rmse_test)
+            print("Correct answers: ",predict(y_test,phi_test,w), '%', "for lambda = %f" %lambda_)
+        loss += loss_temp #add together losses for each k
+    semilog_loss_lambda_plot(loss, lambdas, seed, degree)
+    
+    return w
+
 def predict(y, x, w):
+    '''The function that creates the prediciton during the cross validation'''
     y_pred = x.dot(w)
     correct = sum(np.sign(y_pred) == y)/len(y)
     return correct*100
