@@ -32,6 +32,24 @@ def build_poly(x, degree, crossed):
         cross = np.asarray([np.multiply(x[:,i],x[:,j]) for i in range(x.shape[1]) for j in range(i) if i != j])
         return np.c_[pol,ones,cross.T]
     
+def build_poly_enriched(x, degree):
+    '''Polynomial basis functions for input data x, for j=0 up to j=degree.
+        Else, it return crossed terms containing the features up to order 2:
+        for example x1.x2, x2.x4, x23.x28 etc.
+        some of the terms of orders 3
+        the square root, exponential, logarithm and gaussian exponential of the features.
+        Returns the matrix formed by applying the polynomial basis etc. to the input data'''
+    num_samples = x.shape[0]
+    ones = np.ones((num_samples,))
+    pol = np.asarray([x**power for power in range(1,degree+1)])
+    pol = pol.transpose(1,2,0).reshape(-1,30*degree)
+    cross = np.asarray([np.multiply(x[:,i],x[:,j]) for i in range(x.shape[1]) for j in range(i) if i != j])
+    tri = np.asarray([np.multiply(np.multiply(x[:,i],x[:,j]),x[:,k]) for i in range(15) for j in range(i) for k in range(j)])
+    ex = np.asarray([np.exp(x[:,i]) for i in range(x.shape[1])])
+    sq = np.asarray([np.sqrt(np.abs(x[:,i])) for i in range(x.shape[1])])
+    lo = np.asarray([np.log(np.abs(x[:,i]) + 1) for i in range(x.shape[1])])
+    return np.c_[ones,pol,cross.T, tri.T, ex.T, sq.T, lo.T]
+    
 #Function to get len(w) for GD,SGD (- Redundant!)
 
 def get_length_w(x, degree, crossed):
@@ -211,6 +229,29 @@ def ridge_with_simple_splitting(y,x, degree, ratio, lambdas, seed = 1):
     semilog_loss_lambda_plot(losses, lambdas, seed, degree)
     return w
 
+def ridge_with_simple_splitting_enriched(y,x, degree, ratio, lambdas, seed = 1):
+    '''performe ridge regression with simple splitting of the dataset.
+    ratio is #train/#test
+    print percentage of correct answers for each lambda
+    plot loss vs lambda
+    uses the full polynomial with all the feature modifications
+    return the loss vector'''
+    
+    losses = []
+    y_train, x_train, y_test, x_test = split_data(y, x, ratio, seed)
+    phi_test = build_poly_enriched(x_test, degree)
+    phi_train = build_poly_enriched(x_train, degree)
+
+    for lambda_ in lambdas:
+
+        w, loss = ridge_regression(y_train, phi_train, lambda_)
+        rmse_test = np.sqrt(2*loss)
+
+        losses.append(rmse_test)
+
+        print("Correct answers: ",predict(y_test,phi_test,w), '%', "for lambda = %f" %lambda_)
+    return w
+
 def bayes_with_simple_splitting(y,x, degree, ratio, lambdas, q, seed = 1):
     '''performe bayes regression or order q with simple splitting of the dataset.
     ratio is #train/#test
@@ -290,7 +331,7 @@ def cross_validation_ridge(y, x, k_fold, degree, lambdas, seed = 1):
     #create empty loss array
     loss = np.zeros((len(lambdas))) 
     #add poly values to the features
-    phi = build_poly(x, degree, True)
+    phi = build_poly_enriched(x, degree)
     #build indices for cross validation
     k_indices = build_k_indices(y, k_fold, seed)
 
@@ -308,7 +349,7 @@ def cross_validation_ridge(y, x, k_fold, degree, lambdas, seed = 1):
             loss_temp.append(rmse_test)
             print("Correct answers: ",predict(y_test,phi_test,w), '%', "for lambda = %f" %lambda_)
         loss += loss_temp #add together losses for each k
-    
+    loglog_loss_lambda_plot(loss, lambdas, seed, degree)
     return w
 
 def cross_validation_logistic(y, x, initial_w, max_iters, gamma, k_fold, degree, lambdas, seed = 1):
@@ -373,6 +414,14 @@ def semilog_loss_lambda_plot(loss, lambdas, seed, degree):
     plt.xlabel("$\lambda$")
     plt.ylabel("$\mathcal{L}$")
     plt.semilogx(lambdas, loss, 'r')
+    plt.savefig("lambda_vs_loss_simple_splitting_ridge_seed%i.png" %seed)
+    
+def loglog_loss_lambda_plot(loss, lambdas, seed, degree):
+    #plt.title("Loss vs $\lambda$ for seed = %i and degree = %i" %(seed, degree))
+    plt.xlabel("$log(\lambda)$")
+    plt.ylabel("$log(loss)$")
+    plt.loglog(lambdas, loss, 'r')
+    plt.grid(True)
     plt.savefig("lambda_vs_loss_simple_splitting_ridge_seed%i.png" %seed)
     
 'others'
