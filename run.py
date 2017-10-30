@@ -1,5 +1,5 @@
 '''run.py file giving our kaggle best prediction
-uses ridge regression with polynomial up to degree 12 for each feature
+uses ridge regression with polynomial up to degree 11 for each feature
 degree 2 and some terms of degree 3 for products between different features
 sqrt exp and log of each feature
 lambda to use is obtained with cross validation on the subsample of the dataset
