@@ -41,4 +41,4 @@ y_predicted = np.sign(phi_submission.dot(w))
 #print percentage of -1 just as a check
 print((sum(y_predicted == -1))/len(y_predicted))
 
-create_csv_submission(ids_submission, y_predicted, "predictions_reproduction.csv")
+create_csv_submission(ids_submission, y_predicted, "predictions.csv")
